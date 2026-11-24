@@ -1,3 +1,7 @@
+> **PocketOberon** es una bifurcación de [CapyPS5](https://git.capyps5.org/CapyPS5/CapyPS5), de Ghael-V,
+> con otro nombre, otro ID de app (`com.hcode91.pocketoberon`) y el actualizador desactivado. El resto de
+> este documento es de CapyPS5. Consulta el [README en inglés](README.md) para ver los cambios.
+
 # CapyPS5
 
 [English](README.md) · **Español**

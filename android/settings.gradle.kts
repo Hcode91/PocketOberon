@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CapyPS5"
+rootProject.name = "PocketOberon"
 include(":app")

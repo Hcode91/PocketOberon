@@ -234,11 +234,6 @@ fun SettingsScreen(
                     // The console language every game gets unless it has its own.
                     coreItem(CoreOption.Language),
                     SettingItem(
-                        context.getString(R.string.update_checks), context.getString(R.string.update_checks_desc),
-                        context.getString(if (settings.updateChecks) R.string.enabled else R.string.disabled),
-                        onStep = { settings.updateUpdateChecks(!settings.updateChecks) },
-                    ),
-                    SettingItem(
                         context.getString(R.string.developer_tools), context.getString(R.string.developer_tools_desc),
                         context.getString(if (settings.developerTools) R.string.enabled else R.string.disabled),
                         onStep = { settings.updateDeveloperTools(!settings.developerTools) },
@@ -259,7 +254,7 @@ fun SettingsScreen(
             },
             SettingsCategory(context.getString(R.string.category_about), Icons.Outlined.Info) {
                 listOf(
-                    SettingItem("CapyPS5", "$versionText (Ghael-V)"),
+                    SettingItem("PocketOberon", "$versionText · fork of CapyPS5 by Ghael-V"),
                     SettingItem(
                         context.getString(R.string.support_discord), context.getString(R.string.discord_link),
                         onConfirm = { openLink(context, R.string.discord_link) },

@@ -25,19 +25,23 @@ data class Release(val tag: String, val name: String, val notes: String, val apk
  */
 object Updater {
     private const val TAG = "CapyPS5-Updater"
+    private const val ENABLED = false
     private val SOURCES = listOf(
         "https://git.capyps5.org/api/v1/repos/CapyPS5/CapyPS5/releases?limit=20",
         "https://api.github.com/repos/Ghael-V/CapyPS5/releases?per_page=20",
     )
 
     /** What the launcher and the pause menu show, from the APK's own version name. */
-    fun versionText(context: Context): String = "CapyPS5 v${installedVersion(context)} Beta (ARM64 Android)"
+    fun versionText(context: Context): String = "PocketOberon v${installedVersion(context)} Beta (ARM64 Android)"
 
     fun installedVersion(context: Context): String =
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "0"
 
     /** Newest release whose version is above [current], or null (also when no source answers). */
     suspend fun checkForUpdate(current: String): Release? = withContext(Dispatchers.IO) {
+        // PocketOberon: update checks are turned off. The sources below are CapyPS5's releases, and
+        // installing those would replace this fork, so nothing is ever looked up.
+        if (!ENABLED) return@withContext null
         for (source in SOURCES) {
             val releases = runCatching { fetchReleases(source) }
                 .onFailure { Log.w(TAG, "release check failed at $source: $it") }

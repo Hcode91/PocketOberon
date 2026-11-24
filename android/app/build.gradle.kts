@@ -12,7 +12,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.capyps5.emulator"
+        applicationId = "com.hcode91.pocketoberon"
         minSdk = 31
         targetSdk = 34
         versionCode = 7

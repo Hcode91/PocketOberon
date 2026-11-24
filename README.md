@@ -1,17 +1,21 @@
-# CapyPS5
+# PocketOberon
 
-**English** · [Español](README.es.md)
+PocketOberon is a fork of [CapyPS5](https://git.capyps5.org/CapyPS5/CapyPS5) by Ghael-V. CapyPS5 is a
+PS5 emulator for Android, built on KytyPS5 and the FEX x86-64 JIT, and it also runs PS4 games through
+backward compatibility. All the emulation work is theirs. Please report emulation bugs that also
+happen in CapyPS5 to them.
 
-The first PlayStation 5 emulator for Android, built on KytyPS5 and the FEX x86-64 JIT. It also runs
-PS4 games through backward compatibility, the way a PS5 does.
+What this fork changes:
 
-**Website:** <https://capyps5.org> · **Discord:** <https://discord.com/invite/PEE7Q5TVM5>
+- App ID `com.hcode91.pocketoberon`, so it installs next to CapyPS5 instead of replacing it.
+- New name and artwork. Games are read from the `PocketOberon` folder on internal storage by default.
+- The built-in updater is off, because it would install CapyPS5 over this app.
+- APKs are built by GitHub Actions (see **Building**).
 
-> **Beta (v0.1.0).** Many games work, but many don't run at full speed yet, and PS4 backward
-> compatibility is experimental. Please report problems. The app tells you when a new version is out.
+> **Beta.** Many games work, but many don't run at full speed yet, and PS4 backward compatibility is
+> experimental.
 
-Source code: <https://git.capyps5.org/CapyPS5/CapyPS5> (mirror: <https://github.com/Ghael-V/CapyPS5>).
-Every release has a tag (`v0.0.1`, …) with the exact code it was built from.
+The rest of this README is from CapyPS5 and still applies to PocketOberon.
 
 ## Requirements
 
@@ -61,7 +65,11 @@ but are slow, and many games don't boot yet. Reports help, as for PS5 games.
 
 ## Building
 
-Requirements: Android NDK 28.2, CMake 3.31, Ninja and a JDK 17.
+Every push to `main` builds a debug APK with GitHub Actions (`.github/workflows/build-apk.yml`). Open
+the run in the **Actions** tab and download the `PocketOberon-apk` artifact. You can also start a
+build from the Actions tab with **Run workflow**.
+
+To build by hand you need the Android NDK 28.2, CMake 3.31, Ninja and a JDK 17:
 
 1. Configure and build the core:
 
@@ -78,18 +86,18 @@ Requirements: Android NDK 28.2, CMake 3.31, Ninja and a JDK 17.
    `libfile_redirect_hook.so`, `libgsl_alloc_hook.so`, `libhook_impl.so`), and the NDK's
    `libc++_shared.so` (`<ndk>/toolchains/llvm/prebuilt/<host>/sysroot/usr/lib/aarch64-linux-android/`).
 
-3. Build the APK from `android/`: `./gradlew assembleDebug` (or `assembleRelease`, signed with
-   your own key).
+3. Build the APK from `android/`: `./gradlew assembleDebug`.
 
 ## Credits
 
+- **Hcode91**, PocketOberon fork.
 - **Ghael-V**, author of CapyPS5.
 - **Madelein**, for the CapyPS5 logo.
 - KytyPS5 and the original Kyty by InoriRus, and the FEX project, which CapyPS5 is built on.
 
 ## License
 
-CapyPS5 is free software under the **GNU General Public License v2** (`GPL-2.0-only`, `LICENSE`).
+PocketOberon, like CapyPS5, is free software under the **GNU General Public License v2** (`GPL-2.0-only`, `LICENSE`).
 Every source file names its copyright holders and license in an SPDX header: CapyPS5's own code is
 © 2026 CapyPS5 Project, and derived files keep the credit of KytyPS5 and of the original Kyty by
 InoriRus (MIT, notice in `LICENSES/Kyty-MIT.txt`). Anyone who redistributes or forks it must keep

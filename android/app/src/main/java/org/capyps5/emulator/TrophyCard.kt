@@ -25,7 +25,7 @@ import androidx.core.content.FileProvider
 import org.capyps5.emulator.model.GameItem
 import java.io.File
 
-/** A 1200x630 image of a game's trophy progress, branded with the CapyPS5 logo and name. */
+/** A 1200x630 image of a game's trophy progress, branded with the PocketOberon logo and name. */
 object TrophyCard {
     private const val WIDTH = 1200
     private const val HEIGHT = 630
@@ -176,11 +176,9 @@ object TrophyCard {
         }
         val brandX = logoRect.right + 16f
         brand.color = TEXT
-        canvas.drawText("Capy", brandX, footerY + 21f, brand)
+        canvas.drawText("Pocket", brandX, footerY + 21f, brand)
         brand.color = ACCENT
-        canvas.drawText("PS5", brandX + brand.measureText("Capy"), footerY + 21f, brand)
-        val site = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = TEXT_MUTED; textSize = 28f; textAlign = Paint.Align.RIGHT }
-        canvas.drawText("capyps5.org", WIDTH - MARGIN, footerY + 18f, site)
+        canvas.drawText("Oberon", brandX + brand.measureText("Pocket"), footerY + 21f, brand)
         return bitmap
     }
 

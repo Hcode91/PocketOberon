@@ -288,8 +288,8 @@ private fun TopBar(tab: Int, onTab: (Int) -> Unit, onAdd: () -> Unit, onRefresh:
         Image(painterResource(R.drawable.capy_logo), null, Modifier.size(36.dp))
         Text(
             buildAnnotatedString {
-                withStyle(SpanStyle(color = Capy.TextPrimary)) { append("Capy") }
-                withStyle(SpanStyle(color = Capy.Accent)) { append("PS5") }
+                withStyle(SpanStyle(color = Capy.TextPrimary)) { append("Pocket") }
+                withStyle(SpanStyle(color = Capy.Accent)) { append("Oberon") }
             },
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(start = 8.dp, end = 30.dp),
