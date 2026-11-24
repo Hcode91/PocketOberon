@@ -57,8 +57,9 @@ uint64_t StreamBufferSize() {
 
 // Ring for CPU-to-GPU buffer uploads. 512 MiB suits 12-16 GiB handhelds; on phones with less
 // RAM (8 GiB ones report ~7 GiB) it is GPU memory the game then lacks, and Android's low-memory
-// killer closed games while they loaded. Uploads larger than the ring already fall back to a
-// temporary buffer. `setprop debug.capy.staging_mb N` overrides it (read at start).
+// killer closed games while they loaded (256 MiB was still not enough for Goodnight Universe).
+// Uploads larger than the ring already fall back to a temporary buffer, and a full ring waits for
+// the GPU. `setprop debug.capy.staging_mb N` overrides it (read at start).
 uint64_t StagingBufferSize() {
 	Common::DebugFlags::CachedValue mb("debug.capy.staging_mb", 0);
 	if (mb.Get() > 0) {
@@ -68,7 +69,7 @@ uint64_t StagingBufferSize() {
 	const auto page_size = sysconf(_SC_PAGESIZE);
 	const auto ram       = pages > 0 && page_size > 0 ? static_cast<uint64_t>(pages) * static_cast<uint64_t>(page_size) : 0;
 	constexpr uint64_t SmallRam = 10ull * 1024 * MiB;
-	return (ram != 0 && ram < SmallRam ? 256 : 512) * MiB;
+	return (ram != 0 && ram < SmallRam ? 128 : 512) * MiB;
 }
 
 } // namespace

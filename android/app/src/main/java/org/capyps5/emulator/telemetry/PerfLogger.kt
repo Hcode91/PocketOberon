@@ -233,7 +233,7 @@ class PerfLogger(
                 "guest_ram_mb", "emu_heap_mb", "files_mb", "swap_mb", "graphics_mb",
                 "tex_cache_mb", "tex_gc_start_mb", "buf_cache_mb", "vulkan_used_mb", "evictions_per_s",
                 "low_memory", "trim_level", "file_mapped_mb", "file_maps", "file_read_mb",
-                "flexible_mapped_mb", "direct_mapped_mb",
+                "flexible_mapped_mb", "direct_mapped_mb", "direct_released_mb", "returned_to_android_mb",
             )
         )
     }.joinToString(",")
@@ -256,6 +256,7 @@ class PerfLogger(
         add(if (m.lowMemory) "1" else "0"); add(m.trimLevel?.toString() ?: "")
         add(m.fileMapMb.toString()); add(m.fileMaps.toString()); add(m.fileReadMb.toString())
         add(m.flexibleMapMb.toString()); add(m.directMapMb.toString())
+        add(m.directReleaseMb.toString()); add(m.returnedMb.toString())
     }.joinToString(",")
 
     private fun writeReport() {
@@ -483,6 +484,9 @@ class PerfLogger(
         val fileReadMb: Int,
         val flexibleMapMb: Int,
         val directMapMb: Int,
+        /** Totals so far: direct memory the game released, and freed pages given back to Android. */
+        val directReleaseMb: Int,
+        val returnedMb: Int,
     )
 
     private var lastGraphicsMb: Int? = null
@@ -534,6 +538,8 @@ class PerfLogger(
             fileReadMb = mb(NativeBridge.STAT_FILE_READ_BYTES),
             flexibleMapMb = mb(NativeBridge.STAT_FLEXIBLE_MAP_BYTES),
             directMapMb = mb(NativeBridge.STAT_DIRECT_MAP_BYTES),
+            directReleaseMb = mb(NativeBridge.STAT_DIRECT_RELEASE_BYTES),
+            returnedMb = mb(NativeBridge.STAT_RETURNED_BYTES),
         )
     }
 
@@ -587,6 +593,10 @@ class PerfLogger(
         appendLine(
             "  Game memory requests so far: direct ${last.mem.directMapMb} MB, flexible ${last.mem.flexibleMapMb} MB " +
                 "(pages only count in RAM once used)"
+        )
+        appendLine(
+            "  Game memory freed so far: direct ${last.mem.directReleaseMb} MB released; " +
+                "${last.mem.returnedMb} MB of freed memory given back to Android"
         )
         appendLine(
             "  Files: ${last.mem.fileMaps} memory-mapped = ${last.mem.fileMapMb} MB copied whole into RAM; " +

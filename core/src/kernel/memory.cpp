@@ -2497,7 +2497,11 @@ bool FlexibleMemory::Unmap(uint64_t vaddr, uint64_t size, GpuAccessMode* gpu_mod
 		const auto overlap_start = std::max(vaddr, block.map_vaddr);
 		const auto overlap_end   = std::min(end, block_end);
 		const auto overlap_size  = overlap_end - overlap_start;
-		AddFreeRange(block.backing_offset + overlap_start - block.map_vaddr, overlap_size);
+		const auto free_offset = block.backing_offset + overlap_start - block.map_vaddr;
+		if (g_guest_address_space->DiscardBacking(free_offset, overlap_size)) {
+			Common::Telemetry::g_returned_bytes.fetch_add(overlap_size, std::memory_order_relaxed);
+		}
+		AddFreeRange(free_offset, overlap_size);
 		removed += overlap_size;
 
 		if (block.map_vaddr < overlap_start) {
@@ -3885,13 +3889,33 @@ static int ReleaseDirectMemoryInternal(int64_t start, size_t len, bool skip_gaps
 		EXIT_IF(!g_virtual_ranges->Remove(alias.map_vaddr, alias.map_size));
 	}
 
+	uint64_t released = 0;
+	uint64_t returned = 0;
 	for (const auto& block: allocated_span) {
 		uint64_t      unused_vaddr = 0;
 		uint64_t      unused_size  = 0;
 		GpuAccessMode unused_gpu   = GpuAccessMode::NoAccess;
 		EXIT_IF(!g_physical_memory->Release(block.start_addr, block.size, &unused_vaddr,
 		                                    &unused_size, &unused_gpu));
+		released += block.size;
+		// Nothing maps the range any more (the aliases were unmapped above) and the GPU copies
+		// guest data rather than importing it, so its pages can go back to Android now.
+		if (g_guest_address_space->DiscardBacking(block.start_addr, block.size)) {
+			returned += block.size;
+		}
 	}
+	Common::Telemetry::g_direct_release_bytes.fetch_add(released, std::memory_order_relaxed);
+	Common::Telemetry::g_returned_bytes.fetch_add(returned, std::memory_order_relaxed);
+#if defined(__ANDROID__)
+	if (released >= 64ull * 1024 * 1024) {
+		__android_log_print(ANDROID_LOG_WARN, "CapyPS5-MemMap",
+		                    "direct release %.1f MB at 0x%llx, %.1f MB returned to Android (all returned: %.1f MB)",
+		                    static_cast<double>(released) / 1048576.0,
+		                    static_cast<unsigned long long>(start),
+		                    static_cast<double>(returned) / 1048576.0,
+		                    static_cast<double>(Common::Telemetry::g_returned_bytes.load(std::memory_order_relaxed)) / 1048576.0);
+	}
+#endif
 
 	if (g_free_callback != nullptr) {
 		for (const auto& alias: mapped_aliases) {

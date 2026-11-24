@@ -19,14 +19,38 @@
 #endif
 
 #include "common/assert.h"
+#include "common/debugFlags.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
 #include "graphics/host_gpu/graphicContext.h"
 
 #include <algorithm>
 #include <cinttypes>
+#include <unistd.h>
 
 namespace Libs::Graphics {
+
+namespace {
+
+// VMA carves allocations out of blocks of this size (default 256 MiB), one set per memory type,
+// and a block stays allocated while anything in it is alive. On phones every memory type shares
+// the same RAM, so half-used 256 MiB blocks are RAM the game then lacks. Smaller blocks waste
+// less at the cost of more (cheap) vkAllocateMemory calls; larger resources get their own memory
+// either way. `setprop debug.capy.vma_block_mb N` overrides it (0 = VMA default; read at start).
+uint64_t PreferredBlockSize() {
+	constexpr uint64_t MiB = 1024 * 1024;
+	Common::DebugFlags::CachedValue mb("debug.capy.vma_block_mb", -1);
+	if (mb.Get() >= 0) {
+		return static_cast<uint64_t>(std::clamp<int64_t>(mb.Get(), 0, 1024)) * MiB;
+	}
+	const auto pages     = sysconf(_SC_PHYS_PAGES);
+	const auto page_size = sysconf(_SC_PAGESIZE);
+	const auto ram       = pages > 0 && page_size > 0 ? static_cast<uint64_t>(pages) * static_cast<uint64_t>(page_size) : 0;
+	constexpr uint64_t SmallRam = 10ull * 1024 * MiB;
+	return ram != 0 && ram < SmallRam ? 64 * MiB : 0;
+}
+
+} // namespace
 
 bool GraphicContext::CreateAllocator() {
 	KYTY_PROFILER_FUNCTION();
@@ -44,6 +68,7 @@ bool GraphicContext::CreateAllocator() {
 	info.pVulkanFunctions = &functions;
 	info.vulkanApiVersion = VULKAN_TARGET_API_VERSION;
 	info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	info.preferredLargeHeapBlockSize = PreferredBlockSize(); // 0 keeps VMA's default
 	if (memory_budget_ext_enabled) {
 		info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 	}

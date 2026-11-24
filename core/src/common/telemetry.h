@@ -66,6 +66,10 @@ inline std::atomic<uint64_t> g_file_read_bytes {0};
 // Flexible and direct memory the game mapped (requested sizes; pages count once touched).
 inline std::atomic<uint64_t> g_flexible_map_bytes {0};
 inline std::atomic<uint64_t> g_direct_map_bytes {0};
+// Direct memory the game released, and guest memory (direct or flexible) whose pages went back
+// to Android when freed (cumulative bytes).
+inline std::atomic<uint64_t> g_direct_release_bytes {0};
+inline std::atomic<uint64_t> g_returned_bytes {0};
 
 inline uint64_t NowNs() {
 	return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(

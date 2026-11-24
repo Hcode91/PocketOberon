@@ -8,6 +8,10 @@
 #if defined(__ANDROID__) || defined(ANDROID) || defined(KYTY_PLATFORM_ANDROID)
 #include <android/log.h>
 #endif
+#if defined(__linux__)
+#include <fcntl.h>
+#include <linux/falloc.h>
+#endif
 
 static constexpr uint64_t HOST_SYSTEM_MANAGED_MIN  = 0x0000040000ull;
 static constexpr uint64_t HOST_SYSTEM_MANAGED_MAX  = 0x07ffffbfffull;
@@ -229,8 +233,24 @@ public:
 			return false;
 		}
 		std::lock_guard lock(m_mutex);
-		std::memset(m_backing_base + backing_offset, 0, size);
+		// Punching the range out zeroes it without touching the pages; memset made every page of
+		// a fresh allocation resident at once, even ones the game never uses.
+		if (!PunchHoleLocked(backing_offset, size)) {
+			std::memset(m_backing_base + backing_offset, 0, size);
+		}
 		return true;
+	}
+
+	// Gives the range's pages back to the system and leaves zeros behind. Pages of the shared
+	// backing file otherwise stay in RAM until the process exits, even after the game released
+	// the memory, so a game that frees and reallocates while loading only ever grows.
+	// Returns false (data untouched) where the platform cannot do it.
+	bool DiscardRange(uint64_t backing_offset, uint64_t size) {
+		if (!IsAvailable() || !RangeOk(backing_offset, size)) {
+			return false;
+		}
+		std::lock_guard lock(m_mutex);
+		return PunchHoleLocked(backing_offset, size);
 	}
 
 	bool TryWriteBacking(uint64_t vaddr, const void* data, uint64_t size) {
@@ -664,6 +684,30 @@ private:
 		return false;
 	}
 
+	bool PunchHoleLocked(uint64_t backing_offset, uint64_t size) {
+#if KYTY_PLATFORM == KYTY_PLATFORM_LINUX && !defined(__APPLE__)
+		static std::atomic<bool> unsupported {false};
+		if (m_fd < 0 || unsupported.load(std::memory_order_relaxed)) {
+			return false;
+		}
+		if (fallocate(m_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+		              static_cast<off_t>(backing_offset), static_cast<off_t>(size)) == 0) {
+			return true;
+		}
+		if (errno == EOPNOTSUPP || errno == ENOSYS) {
+			unsupported.store(true, std::memory_order_relaxed);
+		}
+#if defined(__ANDROID__)
+		__android_log_print(ANDROID_LOG_WARN, "CapyPS5-MemMap", "could not return memory to Android: errno %d", errno);
+#endif
+		return false;
+#else
+		(void)backing_offset;
+		(void)size;
+		return false;
+#endif
+	}
+
 	[[nodiscard]] bool RangeOk(uint64_t backing_offset, uint64_t size) const {
 		return size != 0 && backing_offset < m_size && size <= m_size - backing_offset;
 	}
@@ -847,6 +891,10 @@ public:
 
 	bool ZeroBacking(uint64_t backing_offset, uint64_t size) {
 		return m_backing->ZeroRange(backing_offset, size);
+	}
+
+	bool DiscardBacking(uint64_t backing_offset, uint64_t size) {
+		return m_backing->DiscardRange(backing_offset, size);
 	}
 
 	[[nodiscard]] bool Owns(uint64_t vaddr, uint64_t size) {
