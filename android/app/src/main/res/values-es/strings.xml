@@ -155,6 +155,7 @@
     <string name="error_elf_start">No se pudo iniciar el ejecutable. Revisa logcat (CapyPS5-*).</string>
     <string name="back_to_home_a">Volver al inicio  Ⓐ</string>
     <string name="crash_title">El juego se cerró por un error</string>
+    <string name="crash_unexpected_title">El juego se detuvo de forma inesperada</string>
     <!-- Actualizaciones -->
     <string name="perf_log">Registro de rendimiento</string>
     <string name="perf_log_desc">Registra cada segundo la velocidad, la carga de CPU/GPU, el calor y los tirones mientras juegas, con un informe de qué optimizar, en la carpeta logs de tu biblioteca</string>

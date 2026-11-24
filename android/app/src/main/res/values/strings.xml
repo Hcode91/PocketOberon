@@ -157,6 +157,7 @@
     <string name="error_elf_start">Could not start the executable. Check logcat (CapyPS5-*).</string>
     <string name="back_to_home_a">Back to home  Ⓐ</string>
     <string name="crash_title">The game closed because of an error</string>
+    <string name="crash_unexpected_title">The game stopped unexpectedly</string>
     <!-- Updates -->
     <string name="perf_log">Performance log</string>
     <string name="perf_log_desc">Records speed, CPU/GPU load, heat and stutters every second while you play, with a report on what to optimise, in the logs folder of your game library</string>

@@ -110,6 +110,7 @@ class GameActivity : CapyActivity() {
                 ).also { it.start(lifecycleScope) }
             }.onFailure { android.util.Log.w("PocketOberon-Perf", "performance log not started", it) }.getOrNull()
         }
+        GameSession.begin(this, game.titleName)
         val versionText = Updater.versionText(this)
         setContent {
             // The in-game settings can change the button layout while the game runs.
@@ -133,6 +134,7 @@ class GameActivity : CapyActivity() {
     }
 
     private fun exitGame() {
+        GameSession.end(this)
         perfLogger?.finish()
         runCatching { NativeBridge.nativeStopGame() }
         finish()

@@ -63,6 +63,8 @@ class MainActivity : CapyActivity() {
     private var storageCheck by mutableIntStateOf(0)
     // Fatal report the last game session left behind, shown once when the launcher returns.
     private var lastError by mutableStateOf<String?>(null)
+    /** True when [lastError] describes a game that died without the core's own report. */
+    private var lastErrorUnexpected by mutableStateOf(false)
     // Newer release found at start, and whether this launch shows the support card.
     private var update by mutableStateOf<Release?>(null)
     private var showSupport by mutableStateOf(false)
@@ -168,6 +170,7 @@ class MainActivity : CapyActivity() {
                     when {
                         report != null -> CrashDialog(
                             report = report,
+                            unexpected = lastErrorUnexpected,
                             onSaveLog = ::saveLog,
                             onClose = { lastError = null },
                         )
@@ -197,9 +200,36 @@ class MainActivity : CapyActivity() {
         val report = GameActivity.errorFile(this)
         if (report.exists()) {
             lastError = runCatching { report.readText() }.getOrNull()?.takeIf { it.isNotBlank() }
+            lastErrorUnexpected = false
             report.delete()
+            GameSession.end(this)
+        } else {
+            // No report from the core: ask Android whether the game died, and why. The log is
+            // saved straight away, before Android's log buffer moves on.
+            GameSession.takeUnexpectedStop(this)?.let { stop ->
+                lastErrorUnexpected = true
+                lastError = stop.report
+                lifecycleScope.launch {
+                    val saved = withContext(Dispatchers.IO) { saveCrashLog(stop) }
+                    lastError = stop.report + "\n" + (saved?.let { getString(R.string.log_saved_in, it) }
+                        ?: getString(R.string.log_save_failed))
+                }
+            }
         }
     }
+
+    /** Writes Android's reason, then this app's recent log, and the native crash dump if any. */
+    private fun saveCrashLog(stop: GameSession.Stop): String? = runCatching {
+        val dir = File(libraryDir, "logs").apply { mkdirs() }
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val file = File(dir, "pocketoberon-crash-$stamp.txt")
+        file.writeText("=== Why the game stopped (from Android) ===\n${stop.report}\n=== Log ===\n")
+        val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time"))
+        process.inputStream.use { input -> java.io.FileOutputStream(file, true).use { input.copyTo(it) } }
+        process.waitFor()
+        stop.tombstone?.let { File(dir, "pocketoberon-crash-$stamp.tombstone.pb").writeBytes(it) }
+        file.absolutePath
+    }.getOrNull()
 
     private companion object {
         const val SUPPORT_EVERY = 10
@@ -253,7 +283,7 @@ class MainActivity : CapyActivity() {
 }
 
 @Composable
-private fun CrashDialog(report: String, onSaveLog: () -> String?, onClose: () -> Unit) {
+private fun CrashDialog(report: String, unexpected: Boolean, onSaveLog: () -> String?, onClose: () -> Unit) {
     var savedPath by remember { mutableStateOf<String?>(null) }
     var focused by remember { mutableIntStateOf(0) }
     val failedText = stringResource(R.string.log_save_failed)
@@ -278,7 +308,7 @@ private fun CrashDialog(report: String, onSaveLog: () -> String?, onClose: () ->
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(stringResource(R.string.crash_title), style = MaterialTheme.typography.titleLarge, color = Capy.Bad)
+            Text(stringResource(if (unexpected) R.string.crash_unexpected_title else R.string.crash_title), style = MaterialTheme.typography.titleLarge, color = Capy.Bad)
             Text(
                 report.trim(),
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
