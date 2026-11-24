@@ -77,7 +77,7 @@ To build by hand you need the Android NDK 28.2, CMake 3.31, Ninja and a JDK 17:
    cmake -S core -B build-android-arm64 -G Ninja \
      -DCMAKE_TOOLCHAIN_FILE=<ndk>/build/cmake/android.toolchain.cmake \
      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-31 -DCMAKE_BUILD_TYPE=Release \
-     -DKYTY_BUILD_LAUNCHER=OFF
+     -DKYTY_BUILD_LAUNCHER=OFF -DBUILD_TESTING=OFF
    ninja -C build-android-arm64 capyps5
    ```
 
