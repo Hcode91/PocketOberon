@@ -24,6 +24,7 @@
 #include "graphics/shader/rectListShader.h"
 #include "graphics/shader/shader.h"
 #include "common/debugFlags.h"
+#include "common/telemetry.h"
 #include <cinttypes>
 #include <string>
 #if defined(__ANDROID__)
@@ -684,8 +685,12 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
 	if (capture_stats) {
 		pipeline_info.flags |= vk::PipelineCreateFlagBits::eCaptureStatisticsKHR;
 	}
-	result = graphics.device.createGraphicsPipelines(driver_cache, 1, &pipeline_info, nullptr,
-	                                                 &pipeline.pipeline);
+	{
+		Common::Telemetry::ScopedTimer compile_timer(Common::Telemetry::g_pipeline_compile_ns);
+		result = graphics.device.createGraphicsPipelines(driver_cache, 1, &pipeline_info, nullptr,
+		                                                 &pipeline.pipeline);
+	}
+	Common::Telemetry::g_pipelines_created.fetch_add(1, std::memory_order_relaxed);
 	if (capture_stats && result == vk::Result::eSuccess) {
 		LogPipelineStatistics(graphics, pipeline.pipeline, "gfx", vs_input_info.stage.program->shader_hash,
 		                      ps_active ? ps_input_info->stage.program->shader_hash : 0);
@@ -777,8 +782,12 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
 	if (capture_stats) {
 		info.flags |= vk::PipelineCreateFlagBits::eCaptureStatisticsKHR;
 	}
-	result = graphics.device.createComputePipelines(driver_cache, 1, &info, nullptr,
-	                                                &pipeline.pipeline);
+	{
+		Common::Telemetry::ScopedTimer compile_timer(Common::Telemetry::g_pipeline_compile_ns);
+		result = graphics.device.createComputePipelines(driver_cache, 1, &info, nullptr,
+		                                                &pipeline.pipeline);
+	}
+	Common::Telemetry::g_pipelines_created.fetch_add(1, std::memory_order_relaxed);
 	if (capture_stats && result == vk::Result::eSuccess) {
 		LogPipelineStatistics(graphics, pipeline.pipeline, "cs", stage.program->shader_hash, scaled_images);
 	}

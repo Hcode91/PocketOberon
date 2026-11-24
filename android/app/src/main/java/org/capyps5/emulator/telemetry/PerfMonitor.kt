@@ -40,7 +40,11 @@ data class PerfSnapshot(
  * Samples emulator counters and device sensors. Not thread-safe: call [sample] from a single
  * background coroutine. Sensor paths are probed once; unreadable ones are dropped silently.
  */
-class PerfMonitor(private val context: Context) {
+class PerfMonitor(
+    private val context: Context,
+    /** Counter source; the performance log passes one that does not reset the overlay's max. */
+    private val statsSource: () -> LongArray = NativeBridge::nativeGetStats,
+) {
     private val activityManager = context.getSystemService(ActivityManager::class.java)
     private val batteryManager = context.getSystemService(BatteryManager::class.java)
     private val pageSizeKb = android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) / 1024
@@ -63,6 +67,9 @@ class PerfMonitor(private val context: Context) {
 
     private var lastTime = 0L
     private var lastStats: LongArray? = null
+
+    /** Raw counters read by the last [sample], for callers that need more than the snapshot. */
+    val lastRawStats: LongArray? get() = lastStats
     private var lastCpuTotal = 0L
     private var lastCpuIdle = 0L
 
@@ -73,7 +80,7 @@ class PerfMonitor(private val context: Context) {
 
     fun sample(): PerfSnapshot {
         val now = SystemClock.elapsedRealtimeNanos()
-        val stats = runCatching { NativeBridge.nativeGetStats() }.getOrNull()
+        val stats = runCatching { statsSource() }.getOrNull()
         val prev = lastStats
         val dtSec = if (lastTime == 0L) 0f else (now - lastTime) / 1e9f
         lastTime = now

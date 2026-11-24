@@ -127,6 +127,7 @@ fun SettingsScreen(
 
     val categories = remember(
         optionsVersion, settings.libraryPaths, message, driverMessage, settings.updateChecks, settings.developerTools,
+        settings.perfLog, settings.perfDeepProfiling,
     ) {
         listOf(
             SettingsCategory(context.getString(R.string.category_graphics), Icons.Outlined.Image) {
@@ -233,6 +234,16 @@ fun SettingsScreen(
                 listOf(
                     // The console language every game gets unless it has its own.
                     coreItem(CoreOption.Language),
+                    SettingItem(
+                        context.getString(R.string.perf_log), context.getString(R.string.perf_log_desc),
+                        context.getString(if (settings.perfLog) R.string.enabled else R.string.disabled),
+                        onStep = { settings.updatePerfLog(!settings.perfLog) },
+                    ),
+                    SettingItem(
+                        context.getString(R.string.perf_deep), context.getString(R.string.perf_deep_desc),
+                        context.getString(if (settings.perfDeepProfiling) R.string.enabled else R.string.disabled),
+                        onStep = { settings.updatePerfDeepProfiling(!settings.perfDeepProfiling) },
+                    ),
                     SettingItem(
                         context.getString(R.string.developer_tools), context.getString(R.string.developer_tools_desc),
                         context.getString(if (settings.developerTools) R.string.enabled else R.string.disabled),

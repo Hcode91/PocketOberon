@@ -158,6 +158,10 @@
     <string name="back_to_home_a">Back to home  Ⓐ</string>
     <string name="crash_title">The game closed because of an error</string>
     <!-- Updates -->
+    <string name="perf_log">Performance log</string>
+    <string name="perf_log_desc">Records speed, CPU/GPU load, heat and stutters every second while you play, with a report on what to optimise, in the logs folder of your game library</string>
+    <string name="perf_deep">Detailed profiling</string>
+    <string name="perf_deep_desc">With the performance log, also times GPU passes, CPU waits on the GPU and system calls. Makes games a little slower</string>
     <string name="update_checks">Check for updates</string>
     <string name="update_checks_desc">Looks for a newer release each time the app starts</string>
     <string name="update_title">New version available</string>

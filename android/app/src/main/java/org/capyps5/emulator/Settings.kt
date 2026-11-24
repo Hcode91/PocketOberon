@@ -325,6 +325,24 @@ class Settings(context: Context) {
         prefs.edit().putBoolean("developer_tools", value).apply()
     }
 
+    /** PocketOberon performance log: per-second CSV and a report in the library's logs folder. */
+    var perfLog by mutableStateOf(prefs.getBoolean("perf_log", false))
+        private set
+
+    fun updatePerfLog(value: Boolean) {
+        perfLog = value
+        prefs.edit().putBoolean("perf_log", value).apply()
+    }
+
+    /** Also runs the core's GPU/submit/HLE profilers during a performance log (slower). */
+    var perfDeepProfiling by mutableStateOf(prefs.getBoolean("perf_deep_profiling", false))
+        private set
+
+    fun updatePerfDeepProfiling(value: Boolean) {
+        perfDeepProfiling = value
+        prefs.edit().putBoolean("perf_deep_profiling", value).apply()
+    }
+
     /** Global GPU driver id ("" = system driver). */
     fun gpuDriver(): String = prefs.getString("gpu_driver", "").orEmpty()
 

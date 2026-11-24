@@ -9,7 +9,9 @@ import android.os.Bundle
 import android.os.Process
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.lifecycleScope
 import org.capyps5.emulator.model.GameItem
+import org.capyps5.emulator.telemetry.PerfLogger
 import org.libsdl.app.SDL
 import org.capyps5.emulator.ui.screens.EmulationScreen
 import org.capyps5.emulator.ui.theme.CapyPS5Theme
@@ -21,6 +23,8 @@ import java.io.File
  * game ends this process and the launcher, in the main process, stays where it was.
  */
 class GameActivity : CapyActivity() {
+
+    private var perfLogger: PerfLogger? = null
 
     companion object {
         private const val EXTRA_TITLE_ID = "title_id"
@@ -87,6 +91,25 @@ class GameActivity : CapyActivity() {
             driverDir = driver?.dir?.absolutePath.orEmpty(),
             library = driver?.library.orEmpty(),
         )
+        if (settings.perfLog) {
+            if (settings.perfDeepProfiling) {
+                PerfLogger.DEEP_PROFILING_PROPERTIES.forEach { (name, value) -> NativeBridge.nativeSetOption(name, value) }
+            }
+            perfLogger = runCatching {
+                PerfLogger(
+                    context = this,
+                    gameName = game.titleName,
+                    titleId = game.titleId,
+                    logDir = File(settings.libraryPaths.first(), "logs"),
+                    settingsSummary = CoreOption.entries.filter { it != CoreOption.Language }.map { option ->
+                        option.title(this) to option.label(this, settings.effectiveOption(game.titleId, option, game.isUnreal))
+                    },
+                    gpuDriver = driver?.label ?: getString(R.string.gpu_driver_system),
+                    refreshRateHz = display?.refreshRate ?: 60f,
+                    deepProfiling = settings.perfDeepProfiling,
+                ).also { it.start(lifecycleScope) }
+            }.onFailure { android.util.Log.w("PocketOberon-Perf", "performance log not started", it) }.getOrNull()
+        }
         val versionText = Updater.versionText(this)
         setContent {
             // The in-game settings can change the button layout while the game runs.
@@ -104,7 +127,13 @@ class GameActivity : CapyActivity() {
         }
     }
 
+    override fun onDestroy() {
+        perfLogger?.finish()
+        super.onDestroy()
+    }
+
     private fun exitGame() {
+        perfLogger?.finish()
         runCatching { NativeBridge.nativeStopGame() }
         finish()
         // The launcher activity lives in the main process; ending this one frees everything the

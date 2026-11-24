@@ -74,6 +74,20 @@ object NativeBridge {
     const val STAT_NULL_BUFFERS = 5
     const val STAT_RUNNING = 6
     const val STAT_GENERATED_FRAMES = 7 // CapyPS5 Framegen presents
+    const val STAT_PIPELINES_CREATED = 8
+    const val STAT_PIPELINE_COMPILE_NS = 9
+    const val STAT_GPU_WAITS = 10
+    const val STAT_GPU_WAIT_NS = 11
+    const val STAT_ACQUIRE_NS = 12
+    const val STAT_PRESENT_NS = 13
+    /** Game frame-time buckets: <=17 ms, <=34 ms, <=50 ms, <=100 ms, longer. Five entries. */
+    const val STAT_FRAME_BUCKETS = 14
+
+    /** Worst game frame time (ns) since the last call; separate from the overlay's STAT_MAX_FRAME_NS. */
+    external fun nativeTakeLogMaxFrameNs(): Long
+
+    /** Same layout as [nativeGetStats], but leaves the overlay's STAT_MAX_FRAME_NS alone. */
+    external fun nativeGetLogStats(): LongArray
 
     // Button bitmasks corresponding to PS5 DualSense
     const val BTN_SELECT = 1 shl 0

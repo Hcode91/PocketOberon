@@ -277,19 +277,31 @@ JNIEXPORT void JNICALL Java_org_capyps5_emulator_NativeBridge_nativeSendTouch(
 	Libs::Controller::SetTouchPad(Libs::Controller::HOST_INPUT_CONTROLLER_ID, finger, down != JNI_FALSE, x, y);
 }
 
-// Layout must match NativeBridge.STAT_* in Kotlin.
-JNIEXPORT jlongArray JNICALL Java_org_capyps5_emulator_NativeBridge_nativeGetStats(
-    JNIEnv* env, jclass /*clazz*/) {
+// Layout must match NativeBridge.STAT_* in Kotlin. [reset_max] exchanges the overlay's worst frame
+// time with 0; the performance log reads without resetting it.
+static jlongArray GetStats(JNIEnv* env, bool reset_max) {
 	using namespace Common::Telemetry;
 	const jlong values[] = {
 	    static_cast<jlong>(g_game_frames.load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_host_presents.load(std::memory_order_relaxed)),
-	    static_cast<jlong>(g_max_frame_ns.exchange(0, std::memory_order_relaxed)),
+	    static_cast<jlong>(reset_max ? g_max_frame_ns.exchange(0, std::memory_order_relaxed)
+	                                 : g_max_frame_ns.load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_wait_reg_mem_timeouts.load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_wait_reg_mem_unmapped.load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_null_buffer_fallbacks.load(std::memory_order_relaxed)),
 	    g_is_running.load() ? 1 : 0,
 	    static_cast<jlong>(g_generated_frames.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_pipelines_created.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_pipeline_compile_ns.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_gpu_waits.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_gpu_wait_ns.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_acquire_ns.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_present_ns.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_frame_buckets[0].load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_frame_buckets[1].load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_frame_buckets[2].load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_frame_buckets[3].load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_frame_buckets[4].load(std::memory_order_relaxed)),
 	};
 	constexpr auto count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
 	jlongArray     array = env->NewLongArray(count);
@@ -297,6 +309,22 @@ JNIEXPORT jlongArray JNICALL Java_org_capyps5_emulator_NativeBridge_nativeGetSta
 		env->SetLongArrayRegion(array, 0, count, values);
 	}
 	return array;
+}
+
+JNIEXPORT jlongArray JNICALL Java_org_capyps5_emulator_NativeBridge_nativeGetStats(
+    JNIEnv* env, jclass /*clazz*/) {
+	return GetStats(env, true);
+}
+
+JNIEXPORT jlongArray JNICALL Java_org_capyps5_emulator_NativeBridge_nativeGetLogStats(
+    JNIEnv* env, jclass /*clazz*/) {
+	return GetStats(env, false);
+}
+
+// Worst game frame time since the performance log last asked (the overlay has its own).
+JNIEXPORT jlong JNICALL Java_org_capyps5_emulator_NativeBridge_nativeTakeLogMaxFrameNs(
+    JNIEnv* /*env*/, jclass /*clazz*/) {
+	return static_cast<jlong>(Common::Telemetry::g_log_max_frame_ns.exchange(0, std::memory_order_relaxed));
 }
 
 // Five longs per pass: pixel shader address, width << 32 | height, draws, targets, skipped.

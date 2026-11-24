@@ -156,6 +156,10 @@
     <string name="back_to_home_a">Volver al inicio  Ⓐ</string>
     <string name="crash_title">El juego se cerró por un error</string>
     <!-- Actualizaciones -->
+    <string name="perf_log">Registro de rendimiento</string>
+    <string name="perf_log_desc">Registra cada segundo la velocidad, la carga de CPU/GPU, el calor y los tirones mientras juegas, con un informe de qué optimizar, en la carpeta logs de tu biblioteca</string>
+    <string name="perf_deep">Perfilado detallado</string>
+    <string name="perf_deep_desc">Con el registro de rendimiento, mide también las pasadas de GPU, las esperas de la CPU a la GPU y las llamadas al sistema. Hace los juegos un poco más lentos</string>
     <string name="update_checks">Buscar actualizaciones</string>
     <string name="update_checks_desc">Comprueba si hay una versión nueva cada vez que se abre la app</string>
     <string name="update_title">Nueva versión disponible</string>

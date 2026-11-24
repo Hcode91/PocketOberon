@@ -17,6 +17,10 @@ inline std::atomic<uint64_t> g_game_frames {0};
 inline std::atomic<uint64_t> g_last_game_frame_ns {0};
 // Worst frame time since the overlay last exchanged it with 0.
 inline std::atomic<uint64_t> g_max_frame_ns {0};
+// Same as g_max_frame_ns, but exchanged only by the performance log (the overlay resets the other).
+inline std::atomic<uint64_t> g_log_max_frame_ns {0};
+// Game frame times by bucket: <=17 ms, <=34 ms, <=50 ms, <=100 ms, longer (stutters).
+inline std::atomic<uint64_t> g_frame_buckets[5] {};
 // Host swapchain presents (can differ from game frames when the presenter repeats images).
 inline std::atomic<uint64_t> g_host_presents {0};
 // Presents of frames CapyPS5 Framegen generated between guest frames.
@@ -25,6 +29,36 @@ inline std::atomic<uint64_t> g_generated_frames {0};
 inline std::atomic<uint64_t> g_wait_reg_mem_timeouts {0};
 inline std::atomic<uint64_t> g_wait_reg_mem_unmapped {0};
 inline std::atomic<uint64_t> g_null_buffer_fallbacks {0};
+
+// PocketOberon performance log: where frame time goes. All cumulative; the frontend takes deltas.
+// Vulkan pipelines the driver compiled, and the time spent compiling them (shader stutter).
+inline std::atomic<uint64_t> g_pipelines_created {0};
+inline std::atomic<uint64_t> g_pipeline_compile_ns {0};
+// Time CPU threads blocked waiting for the GPU to finish work (high = GPU-bound or serialised).
+inline std::atomic<uint64_t> g_gpu_waits {0};
+inline std::atomic<uint64_t> g_gpu_wait_ns {0};
+// Time spent in vkAcquireNextImageKHR and vkQueuePresentKHR (high = display/vsync-bound).
+inline std::atomic<uint64_t> g_acquire_ns {0};
+inline std::atomic<uint64_t> g_present_ns {0};
+
+inline uint64_t NowNs() {
+	return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+	                                 std::chrono::steady_clock::now().time_since_epoch())
+	                                 .count());
+}
+
+// Adds the time since construction to a counter.
+class ScopedTimer {
+public:
+	explicit ScopedTimer(std::atomic<uint64_t>& counter): m_counter(counter), m_start(NowNs()) {}
+	~ScopedTimer() { m_counter.fetch_add(NowNs() - m_start, std::memory_order_relaxed); }
+	ScopedTimer(const ScopedTimer&)            = delete;
+	ScopedTimer& operator=(const ScopedTimer&) = delete;
+
+private:
+	std::atomic<uint64_t>& m_counter;
+	uint64_t               m_start;
+};
 
 inline void RecordGameFrame() {
 	const auto now  = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -36,6 +70,13 @@ inline void RecordGameFrame() {
 		auto       max   = g_max_frame_ns.load(std::memory_order_relaxed);
 		while (delta > max && !g_max_frame_ns.compare_exchange_weak(max, delta, std::memory_order_relaxed)) {
 		}
+		auto log_max = g_log_max_frame_ns.load(std::memory_order_relaxed);
+		while (delta > log_max &&
+		       !g_log_max_frame_ns.compare_exchange_weak(log_max, delta, std::memory_order_relaxed)) {
+		}
+		const auto ms     = delta / 1'000'000u;
+		const int  bucket = ms <= 17 ? 0 : ms <= 34 ? 1 : ms <= 50 ? 2 : ms <= 100 ? 3 : 4;
+		g_frame_buckets[bucket].fetch_add(1, std::memory_order_relaxed);
 	}
 	g_game_frames.fetch_add(1, std::memory_order_relaxed);
 }

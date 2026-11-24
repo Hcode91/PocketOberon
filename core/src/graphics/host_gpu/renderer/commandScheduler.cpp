@@ -11,6 +11,7 @@
 #include "graphics/host_gpu/renderer/gpuProfiler.h"
 #include "common/assert.h"
 #include "common/debugFlags.h"
+#include "common/telemetry.h"
 #include "common/logging/log.h"
 #include "graphics/host_gpu/graphicContext.h"
 
@@ -139,6 +140,8 @@ void NoteWait(std::chrono::steady_clock::time_point start) {
 } // namespace SubmitStats
 #define SUBMIT_STATS_WAIT(expr)                                                                     \
 	do {                                                                                           \
+		Common::Telemetry::g_gpu_waits.fetch_add(1, std::memory_order_relaxed);                     \
+		Common::Telemetry::ScopedTimer gpu_wait_timer(Common::Telemetry::g_gpu_wait_ns);            \
 		if (SubmitStats::Enabled()) {                                                              \
 			const auto submit_stats_start = std::chrono::steady_clock::now();                      \
 			expr;                                                                                  \
@@ -148,7 +151,12 @@ void NoteWait(std::chrono::steady_clock::time_point start) {
 		}                                                                                          \
 	} while (false)
 #else
-#define SUBMIT_STATS_WAIT(expr) expr
+#define SUBMIT_STATS_WAIT(expr)                                                                     \
+	do {                                                                                           \
+		Common::Telemetry::g_gpu_waits.fetch_add(1, std::memory_order_relaxed);                     \
+		Common::Telemetry::ScopedTimer gpu_wait_timer(Common::Telemetry::g_gpu_wait_ns);            \
+		expr;                                                                                      \
+	} while (false)
 #endif
 
 namespace {

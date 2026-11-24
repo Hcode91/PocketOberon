@@ -688,6 +688,7 @@ Swapchain::Status Swapchain::AcquireNextImage() {
 		return Status::SurfaceLost;
 	}
 	m_image_index     = static_cast<uint32_t>(-1);
+	Common::Telemetry::ScopedTimer acquire_timer(Common::Telemetry::g_acquire_ns);
 	const auto result = m_window.graphic_ctx.device.acquireNextImageKHR(
 	    m_handle, std::numeric_limits<uint64_t>::max(), m_image_acquired[m_frame_index], nullptr,
 	    &m_image_index);
@@ -1002,7 +1003,8 @@ Swapchain::Status Swapchain::Present() {
 
 	vk::Result result;
 	{
-		Common::LockGuard lock(m_window.graphic_ctx.queue_mutex);
+		Common::LockGuard              lock(m_window.graphic_ctx.queue_mutex);
+		Common::Telemetry::ScopedTimer present_timer(Common::Telemetry::g_present_ns);
 		result = m_window.graphic_ctx.queue.presentKHR(&present);
 	}
 	switch (result) {
