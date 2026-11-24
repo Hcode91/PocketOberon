@@ -258,16 +258,7 @@ fun HomeScreen(
  */
 private fun treeUriToPath(uri: Uri): String? {
     val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
-    // The Downloads provider can hand out real paths directly ("raw:/storage/emulated/0/...").
-    if (docId.startsWith("raw:")) return docId.removePrefix("raw:")
-    val volume = docId.substringBefore(':')
-    val relative = docId.substringAfter(':', "")
-    val root = if (volume.equals("primary", ignoreCase = true)) {
-        Environment.getExternalStorageDirectory().absolutePath
-    } else {
-        "/storage/$volume"
-    }
-    return if (relative.isEmpty()) root else "$root/$relative"
+    return org.capyps5.emulator.StoragePaths.documentIdToPath(docId)
 }
 
 @Composable

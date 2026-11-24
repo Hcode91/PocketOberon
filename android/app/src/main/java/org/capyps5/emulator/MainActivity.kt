@@ -124,20 +124,30 @@ class MainActivity : CapyActivity() {
                             lifecycleScope.launch {
                                 // Content-resolver reads of a picked eboot can be large;
                                 // keep them off the main thread, then launch the game.
-                                val localFile = withContext(Dispatchers.IO) {
+                                // Run the executable where it is, so the game keeps its sce_module/
+                                // and sce_sys/ folders; copy it only when it can't be read in place.
+                                val inPlace = withContext(Dispatchers.IO) {
                                     if (uriString.startsWith("content://")) {
-                                        copyUriToLocal(android.net.Uri.parse(uriString))
+                                        StoragePaths.documentUriToFile(this@MainActivity, android.net.Uri.parse(uriString))
                                     } else {
-                                        File(uriString)
+                                        File(uriString).takeIf { it.isFile }
                                     }
                                 }
+                                val localFile = inPlace ?: withContext(Dispatchers.IO) {
+                                    copyUriToLocal(android.net.Uri.parse(uriString))
+                                }
                                 if (localFile != null && localFile.exists()) {
-                                    val newGame = GameItem(
-                                        titleId = "LOCAL",
-                                        titleName = localFile.name,
-                                        directoryPath = localFile.parent ?: filesDir.absolutePath,
-                                        elfPath = localFile.absolutePath,
-                                    )
+                                    val gameDir = localFile.parentFile
+                                    val newGame = if (inPlace != null && gameDir != null && File(gameDir, "sce_sys").isDirectory) {
+                                        GameItem.fromGameDir(gameDir, localFile)
+                                    } else {
+                                        GameItem(
+                                            titleId = "LOCAL",
+                                            titleName = localFile.name,
+                                            directoryPath = gameDir?.absolutePath ?: filesDir.absolutePath,
+                                            elfPath = localFile.absolutePath,
+                                        )
+                                    }
                                     games.add(newGame)
                                     GameActivity.launch(this@MainActivity, newGame)
                                 }
