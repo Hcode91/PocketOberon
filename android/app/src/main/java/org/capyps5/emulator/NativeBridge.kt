@@ -82,6 +82,16 @@ object NativeBridge {
     const val STAT_PRESENT_NS = 13
     /** Game frame-time buckets: <=17 ms, <=34 ms, <=50 ms, <=100 ms, longer. Five entries. */
     const val STAT_FRAME_BUCKETS = 14
+    // Memory gauges (bytes) and texture evictions (cumulative); see telemetry.h.
+    const val STAT_MEM_TEXTURE_USED = 19
+    const val STAT_MEM_TEXTURE_TRIGGER = 20
+    const val STAT_MEM_TEXTURE_PRESSURE = 21
+    const val STAT_MEM_TEXTURE_CRITICAL = 22
+    const val STAT_MEM_BUFFER_USED = 23
+    const val STAT_MEM_BUFFER_TRIGGER = 24
+    const val STAT_MEM_VULKAN_USED = 25
+    const val STAT_MEM_VULKAN_BUDGET = 26
+    const val STAT_TEXTURE_EVICTIONS = 27
 
     /** Worst game frame time (ns) since the last call; separate from the overlay's STAT_MAX_FRAME_NS. */
     external fun nativeTakeLogMaxFrameNs(): Long

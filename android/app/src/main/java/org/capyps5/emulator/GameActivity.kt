@@ -128,6 +128,11 @@ class GameActivity : CapyActivity() {
         }
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        perfLogger?.noteTrim(level)
+    }
+
     override fun onDestroy() {
         perfLogger?.finish()
         super.onDestroy()

@@ -157,6 +157,12 @@ TextureCache::TextureCache(GraphicContext& graphics, CommandScheduler& scheduler
 		m_pressure_gc_memory = 2560 * MiB;
 		m_critical_gc_memory = 3584 * MiB;
 	}
+	Common::Telemetry::g_mem_texture_trigger.store(m_trigger_gc_memory, std::memory_order_relaxed);
+	Common::Telemetry::g_mem_texture_pressure.store(m_pressure_gc_memory, std::memory_order_relaxed);
+	Common::Telemetry::g_mem_texture_critical.store(m_critical_gc_memory, std::memory_order_relaxed);
+	if (m_graphics.CanReportMemoryUsage()) {
+		Common::Telemetry::g_mem_vulkan_budget.store(m_graphics.GetTotalMemoryBudget(), std::memory_order_relaxed);
+	}
 }
 
 TextureCache::~TextureCache() {
@@ -2869,7 +2875,9 @@ void TextureCache::RunGarbageCollector() {
 	const uint64_t   tick = m_gc_tick++;
 	if (m_graphics.CanReportMemoryUsage()) {
 		m_total_used_memory = m_graphics.GetDeviceMemoryUsage();
+		Common::Telemetry::g_mem_vulkan_used.store(m_total_used_memory, std::memory_order_relaxed);
 	}
+	Common::Telemetry::g_mem_texture_used.store(m_total_used_memory, std::memory_order_relaxed);
 	// `setprop debug.capy.gc_trigger_mb N` overrides the collection threshold (testing).
 	static Common::DebugFlags::CachedValue gc_trigger_mb("debug.capy.gc_trigger_mb", 0);
 	const uint64_t trigger = gc_trigger_mb.Get() > 0
@@ -2906,6 +2914,7 @@ void TextureCache::RunGarbageCollector() {
 			}
 			--deletions;
 			FreeImage(id);
+			Common::Telemetry::g_texture_evictions.fetch_add(1, std::memory_order_relaxed);
 			if (m_total_used_memory < m_critical_gc_memory && aggressive) {
 				deletions >>= 2;
 				aggressive = false;

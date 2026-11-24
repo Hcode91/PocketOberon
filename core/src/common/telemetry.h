@@ -41,6 +41,22 @@ inline std::atomic<uint64_t> g_gpu_wait_ns {0};
 inline std::atomic<uint64_t> g_acquire_ns {0};
 inline std::atomic<uint64_t> g_present_ns {0};
 
+// Memory, for the performance log. Gauges (current values), not counters.
+// Texture cache: what it holds, and the levels where it starts evicting / evicts harder / hardest.
+inline std::atomic<uint64_t> g_mem_texture_used {0};
+inline std::atomic<uint64_t> g_mem_texture_trigger {0};
+inline std::atomic<uint64_t> g_mem_texture_pressure {0};
+inline std::atomic<uint64_t> g_mem_texture_critical {0};
+// Buffer cache: what it holds, and the level where it starts evicting.
+inline std::atomic<uint64_t> g_mem_buffer_used {0};
+inline std::atomic<uint64_t> g_mem_buffer_trigger {0};
+// All Vulkan memory the driver reports in use (VK_EXT_memory_budget; 0 when not reported),
+// and the budget the caches were sized from.
+inline std::atomic<uint64_t> g_mem_vulkan_used {0};
+inline std::atomic<uint64_t> g_mem_vulkan_budget {0};
+// Images the texture cache evicted (cumulative; a high rate means it is thrashing).
+inline std::atomic<uint64_t> g_texture_evictions {0};
+
 inline uint64_t NowNs() {
 	return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
 	                                 std::chrono::steady_clock::now().time_since_epoch())

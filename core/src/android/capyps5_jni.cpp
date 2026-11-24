@@ -302,6 +302,15 @@ static jlongArray GetStats(JNIEnv* env, bool reset_max) {
 	    static_cast<jlong>(g_frame_buckets[2].load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_frame_buckets[3].load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_frame_buckets[4].load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_texture_used.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_texture_trigger.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_texture_pressure.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_texture_critical.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_buffer_used.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_buffer_trigger.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_vulkan_used.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_mem_vulkan_budget.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_texture_evictions.load(std::memory_order_relaxed)),
 	};
 	constexpr auto count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
 	jlongArray     array = env->NewLongArray(count);

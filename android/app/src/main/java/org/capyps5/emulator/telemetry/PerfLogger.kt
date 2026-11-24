@@ -91,6 +91,7 @@ class PerfLogger(
         val powerWatts: Float?,
         val appRamMb: Int,
         val availRamMb: Int,
+        val mem: MemSample,
         val thermalStatus: Int,
         val thermalHeadroom: Float?,
         val pipelines: Float,
@@ -120,7 +121,7 @@ class PerfLogger(
             while (isActive) {
                 runCatching { sampleOnce(tick) }.onFailure { Log.w(TAG, "sample failed", it) }
                 tick++
-                if (tick % 30 == 0) runCatching { writeReport() }
+                if (tick % 5 == 0) runCatching { writeReport() }
                 delay(1000)
             }
         }
@@ -185,6 +186,7 @@ class PerfLogger(
             powerWatts = snapshot.powerWatts,
             appRamMb = snapshot.appRamMb,
             availRamMb = (memInfo.availMem / (1024 * 1024)).toInt(),
+            mem = sampleMemory(stats, tick, perSec(NativeBridge.STAT_TEXTURE_EVICTIONS), memInfo.lowMemory),
             thermalStatus = powerManager.currentThermalStatus,
             thermalHeadroom = headroom,
             pipelines = perSec(NativeBridge.STAT_PIPELINES_CREATED),
@@ -228,6 +230,9 @@ class PerfLogger(
                 "app_ram_mb", "avail_ram_mb", "thermal_status", "thermal_headroom",
                 "pipelines_per_s", "compile_ms_per_s", "gpu_wait_ms_per_s", "acquire_ms_per_s",
                 "present_ms_per_s", "top_thread", "top_thread_pct", "top_thread_cpu",
+                "guest_ram_mb", "emu_heap_mb", "files_mb", "swap_mb", "graphics_mb",
+                "tex_cache_mb", "tex_gc_start_mb", "buf_cache_mb", "vulkan_used_mb", "evictions_per_s",
+                "low_memory", "trim_level",
             )
         )
     }.joinToString(",")
@@ -243,6 +248,11 @@ class PerfLogger(
         add(f1(r.pipelines)); add(f1(r.compileMs)); add(f1(r.gpuWaitMs)); add(f1(r.acquireMs))
         add(f1(r.presentMs)); add(r.topThread.replace(',', ' ')); add(f1(r.topThreadPercent))
         add(r.topThreadCpu.toString())
+        val m = r.mem
+        add(m.guestMb.toString()); add(m.heapMb.toString()); add(m.fileMb.toString()); add(m.swapMb.toString())
+        add(m.graphicsMb?.toString() ?: ""); add(m.textureMb.toString()); add(m.textureTriggerMb.toString())
+        add(m.bufferMb.toString()); add(m.vulkanMb?.toString() ?: ""); add(f1(m.evictionsPerSec))
+        add(if (m.lowMemory) "1" else "0"); add(m.trimLevel?.toString() ?: "")
     }.joinToString(",")
 
     private fun writeReport() {
@@ -274,8 +284,15 @@ class PerfLogger(
         appendLine("  Detailed profiling: ${if (deepProfiling) "on (costs some speed)" else "off"}")
         appendLine()
 
+        appendMemory(this)
+
         if (run.isEmpty()) {
             appendLine("No in-game frames were recorded yet.")
+            if (memoryFindings().isNotEmpty()) {
+                appendLine()
+                appendLine("WHAT TO LOOK AT")
+                memoryFindings().forEach { appendLine("  - $it") }
+            }
             return@buildString
         }
 
@@ -343,12 +360,7 @@ class PerfLogger(
         appendLine("  Average power draw: ${avgPower?.let { "${f1(it)} W" } ?: "not readable"}")
         appendLine()
 
-        val peakRam = run.maxOf { it.appRamMb }
-        val minAvail = run.minOf { it.availRamMb }
-        appendLine("MEMORY")
-        appendLine("  Emulator peak: $peakRam MB; lowest free on the phone: $minAvail MB of $totalRamMb MB")
-        appendLine()
-
+        val minAvail = rows.minOf { it.availRamMb }
         val warn = lastWarnings?.let { last ->
             val first = firstWarnings ?: LongArray(3)
             LongArray(3) { (last[it] - first[it]).coerceAtLeast(0) }
@@ -428,14 +440,159 @@ class PerfLogger(
                     "Speed will drop over long sessions; a lower resolution or frame limit keeps the phone cooler."
             )
         }
-        if (minAvail < totalRamMb * 0.08f) {
-            add("Memory is tight: only $minAvail MB was free at one point. Close other apps; Android may kill the game.")
-        }
         if (warn.any { it > 0 }) {
             add("Emulation warnings were logged. Those point at emulator bugs, not phone limits.")
         }
         if (avgFps > 0f && avgFps >= refreshRateHz - 2f) {
             add("Running at the display's refresh rate: there is spare speed.")
+        }
+        addAll(memoryFindings())
+    }
+
+    /** Where the emulator's memory is, at one moment. Sizes in MB. */
+    private data class MemSample(
+        /** Guest (PS5) RAM the game has touched: the shared-memory part of the emulator's RSS. */
+        val guestMb: Int,
+        /** The emulator's own heap: JIT code cache, caches' CPU copies, driver allocations. */
+        val heapMb: Int,
+        /** Mapped files (libraries, game files read through mmap). */
+        val fileMb: Int,
+        /** Pages Android swapped out to zRAM. */
+        val swapMb: Int,
+        /** GPU memory attributed to the emulator by Android (read every 5 s; null if not reported). */
+        val graphicsMb: Int?,
+        val textureMb: Int,
+        val textureTriggerMb: Int,
+        val texturePressureMb: Int,
+        val textureCriticalMb: Int,
+        val bufferMb: Int,
+        val bufferTriggerMb: Int,
+        /** All Vulkan memory in use, as the driver reports it (null without VK_EXT_memory_budget). */
+        val vulkanMb: Int?,
+        val vulkanBudgetMb: Int?,
+        val evictionsPerSec: Float,
+        val lowMemory: Boolean,
+        /** onTrimMemory level Android sent in this second, if any. */
+        val trimLevel: Int?,
+    )
+
+    private var lastGraphicsMb: Int? = null
+    @Volatile private var pendingTrim: Int? = null
+    private val trimEvents = ArrayList<Pair<Float, Int>>()
+
+    /** Android's warning that memory is running out (from GameActivity.onTrimMemory). */
+    fun noteTrim(level: Int) {
+        pendingTrim = maxOf(pendingTrim ?: 0, level)
+        synchronized(lock) { trimEvents.add((SystemClock.elapsedRealtimeNanos() - startNs) / 1e9f to level) }
+    }
+
+    private fun sampleMemory(stats: LongArray, tick: Int, evictionsPerSec: Float, lowMemory: Boolean): MemSample {
+        val status = runCatching { File("/proc/self/status").readLines() }.getOrDefault(emptyList())
+        fun kb(key: String): Int =
+            status.firstOrNull { it.startsWith("$key:") }?.split(Regex("\\s+"))?.getOrNull(1)?.toIntOrNull() ?: 0
+        // Debug.getMemoryInfo takes tens of ms: every 5 s is enough.
+        if (tick % 5 == 0) {
+            lastGraphicsMb = runCatching {
+                val info = android.os.Debug.MemoryInfo()
+                android.os.Debug.getMemoryInfo(info)
+                info.getMemoryStat("summary.graphics")?.toIntOrNull()?.div(1024)
+            }.getOrNull()
+        }
+        fun mb(index: Int): Int = ((stats.getOrNull(index) ?: 0L) / (1024 * 1024)).toInt()
+        val vulkan = mb(NativeBridge.STAT_MEM_VULKAN_USED)
+        val budget = mb(NativeBridge.STAT_MEM_VULKAN_BUDGET)
+        val trim = pendingTrim
+        pendingTrim = null
+        return MemSample(
+            guestMb = kb("RssShmem") / 1024,
+            heapMb = kb("RssAnon") / 1024,
+            fileMb = kb("RssFile") / 1024,
+            swapMb = kb("VmSwap") / 1024,
+            graphicsMb = lastGraphicsMb,
+            textureMb = mb(NativeBridge.STAT_MEM_TEXTURE_USED),
+            textureTriggerMb = mb(NativeBridge.STAT_MEM_TEXTURE_TRIGGER),
+            texturePressureMb = mb(NativeBridge.STAT_MEM_TEXTURE_PRESSURE),
+            textureCriticalMb = mb(NativeBridge.STAT_MEM_TEXTURE_CRITICAL),
+            bufferMb = mb(NativeBridge.STAT_MEM_BUFFER_USED),
+            bufferTriggerMb = mb(NativeBridge.STAT_MEM_BUFFER_TRIGGER),
+            vulkanMb = vulkan.takeIf { it > 0 },
+            vulkanBudgetMb = budget.takeIf { it > 0 },
+            evictionsPerSec = evictionsPerSec,
+            lowMemory = lowMemory,
+            trimLevel = trim,
+        )
+    }
+
+    private fun trimName(level: Int) = when (level) {
+        android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> "running moderate"
+        android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> "running low"
+        android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> "running CRITICAL"
+        android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> "UI hidden"
+        android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> "background"
+        android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> "moderate"
+        android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> "complete"
+        else -> "level $level"
+    }
+
+    private fun memLine(label: String, m: MemSample, appMb: Int, availMb: Int) =
+        "  $label: emulator ${appMb} MB in RAM = guest (PS5) RAM ${m.guestMb} + emulator heap ${m.heapMb} + files ${m.fileMb}" +
+            (if (m.swapMb > 0) ", plus ${m.swapMb} MB swapped out" else "") +
+            "; GPU ${m.graphicsMb?.let { "$it MB" } ?: "n/a"}; phone free ${availMb} MB"
+
+    private fun appendMemory(sb: StringBuilder) = with(sb) {
+        if (rows.isEmpty()) return@with
+        val tightest = rows.minBy { it.availRamMb }
+        val last = rows.last()
+        val peak = rows.maxBy { it.appRamMb }
+        appendLine("MEMORY (whole session, loading included; ${totalRamMb} MB phone)")
+        appendLine(memLine("When free RAM was lowest (${secs(tightest.timeSec)})", tightest.mem, tightest.appRamMb, tightest.availRamMb))
+        appendLine(memLine("Emulator at its largest (${secs(peak.timeSec)})", peak.mem, peak.appRamMb, peak.availRamMb))
+        appendLine(memLine("Last sample (${secs(last.timeSec)})", last.mem, last.appRamMb, last.availRamMb))
+        val m = rows.maxBy { it.mem.textureMb }.mem
+        appendLine(
+            "  Texture cache: peak ${m.textureMb} MB; starts freeing at ${m.textureTriggerMb} MB, harder at " +
+                "${m.texturePressureMb} MB, hardest at ${m.textureCriticalMb} MB"
+        )
+        appendLine("  Buffer cache: peak ${rows.maxOf { it.mem.bufferMb }} MB; starts freeing at ${last.mem.bufferTriggerMb} MB")
+        val vk = rows.mapNotNull { it.mem.vulkanMb }.maxOrNull()
+        appendLine(
+            "  Vulkan memory in use: " + (vk?.let { "peak $it MB" } ?: "not reported by this driver") +
+                (last.mem.vulkanBudgetMb?.let { "; caches were sized for a budget of $it MB" } ?: "")
+        )
+        val evictions = rows.sumOf { it.mem.evictionsPerSec.toDouble() }.roundToInt()
+        appendLine("  Textures evicted: $evictions${if (evictions > 0) " (peak ${f1(rows.maxOf { it.mem.evictionsPerSec })}/s)" else ""}")
+        val lowSecs = rows.count { it.mem.lowMemory }
+        appendLine("  Android 'low memory' flag: ${if (lowSecs == 0) "never set" else "set for $lowSecs s"}")
+        if (trimEvents.isEmpty()) {
+            appendLine("  Memory warnings from Android: none")
+        } else {
+            appendLine("  Memory warnings from Android: " + trimEvents.takeLast(8).joinToString(", ") { (t, l) -> "${trimName(l)} at ${secs(t)}" })
+        }
+        appendLine()
+    }
+
+    private fun memoryFindings(): List<String> = buildList {
+        if (rows.isEmpty()) return@buildList
+        val minAvail = rows.minOf { it.availRamMb }
+        val peakApp = rows.maxOf { it.appRamMb }
+        if (minAvail < totalRamMb * 0.10f || trimEvents.any { it.second >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW }) {
+            add("Memory is tight: as little as $minAvail MB was free while the emulator used up to $peakApp MB. Android kills the game when this runs out.")
+        }
+        val m = rows.maxBy { it.mem.textureMb }.mem
+        if (m.textureTriggerMb > 0 && m.textureTriggerMb > totalRamMb * 0.15f) {
+            add(
+                "Optimisation candidate: the texture cache only starts freeing memory at ${m.textureTriggerMb} MB (that limit was tuned for phones with more RAM). " +
+                    "On this ${totalRamMb} MB phone a lower limit would leave more room."
+            )
+        }
+        val tight = rows.minBy { it.availRamMb }.mem
+        val biggest = listOf("guest (PS5) RAM" to tight.guestMb, "emulator heap" to tight.heapMb, "GPU memory" to (tight.graphicsMb ?: 0))
+            .maxBy { it.second }
+        if (minAvail < totalRamMb * 0.10f && biggest.second > 0) {
+            add("When memory was tightest, the largest part was ${biggest.first} (${biggest.second} MB): that is the first thing to shrink.")
+        }
+        if (rows.maxOf { it.mem.evictionsPerSec } >= 20f) {
+            add("The texture cache is evicting a lot (up to ${f1(rows.maxOf { it.mem.evictionsPerSec })} textures/s), which causes re-uploads and stutter.")
         }
     }
 

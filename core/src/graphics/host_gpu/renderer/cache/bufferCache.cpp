@@ -1085,6 +1085,8 @@ void BufferCache::RunGarbageCollector() {
 	if (m_graphics.CanReportMemoryUsage()) {
 		m_total_used_memory = m_graphics.GetDeviceMemoryUsage();
 	}
+	Common::Telemetry::g_mem_buffer_used.store(m_total_used_memory, std::memory_order_relaxed);
+	Common::Telemetry::g_mem_buffer_trigger.store(m_trigger_gc_memory, std::memory_order_relaxed);
 	if (m_total_used_memory < m_trigger_gc_memory) {
 		return;
 	}
