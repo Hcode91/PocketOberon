@@ -30,6 +30,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # SDL3's unused sample project ships a wrapper JAR the validator doesn't recognise.
+          validate-wrappers: false
 
       - name: Install CMake 3.31 and Ninja
         uses: lukka/get-cmake@latest
