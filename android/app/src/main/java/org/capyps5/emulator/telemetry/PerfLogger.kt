@@ -549,16 +549,25 @@ class PerfLogger(
         appendLine(memLine("Emulator at its largest (${secs(peak.timeSec)})", peak.mem, peak.appRamMb, peak.availRamMb))
         appendLine(memLine("Last sample (${secs(last.timeSec)})", last.mem, last.appRamMb, last.availRamMb))
         val m = rows.maxBy { it.mem.textureMb }.mem
-        appendLine(
-            "  Texture cache: peak ${m.textureMb} MB; starts freeing at ${m.textureTriggerMb} MB, harder at " +
-                "${m.texturePressureMb} MB, hardest at ${m.textureCriticalMb} MB"
-        )
-        appendLine("  Buffer cache: peak ${rows.maxOf { it.mem.bufferMb }} MB; starts freeing at ${last.mem.bufferTriggerMb} MB")
         val vk = rows.mapNotNull { it.mem.vulkanMb }.maxOrNull()
         appendLine(
-            "  Vulkan memory in use: " + (vk?.let { "peak $it MB" } ?: "not reported by this driver") +
+            "  Vulkan (GPU) memory in use: " + (vk?.let { "peak $it MB" } ?: "not reported by this driver") +
                 (last.mem.vulkanBudgetMb?.let { "; caches were sized for a budget of $it MB" } ?: "")
         )
+        if (vk != null) {
+            // With VK_EXT_memory_budget both caches measure ALL Vulkan memory, not only their own.
+            appendLine(
+                "  Cache cleanup levels (compared with all Vulkan memory above): textures start freeing at " +
+                    "${m.textureTriggerMb} MB, harder at ${m.texturePressureMb} MB, hardest at ${m.textureCriticalMb} MB; " +
+                    "buffers start at ${last.mem.bufferTriggerMb} MB"
+            )
+        } else {
+            appendLine(
+                "  Texture cache: peak ${m.textureMb} MB; starts freeing at ${m.textureTriggerMb} MB, harder at " +
+                    "${m.texturePressureMb} MB, hardest at ${m.textureCriticalMb} MB"
+            )
+            appendLine("  Buffer cache: peak ${rows.maxOf { it.mem.bufferMb }} MB; starts freeing at ${last.mem.bufferTriggerMb} MB")
+        }
         val evictions = rows.sumOf { it.mem.evictionsPerSec.toDouble() }.roundToInt()
         appendLine("  Textures evicted: $evictions${if (evictions > 0) " (peak ${f1(rows.maxOf { it.mem.evictionsPerSec })}/s)" else ""}")
         val lowSecs = rows.count { it.mem.lowMemory }
@@ -579,9 +588,16 @@ class PerfLogger(
             add("Memory is tight: as little as $minAvail MB was free while the emulator used up to $peakApp MB. Android kills the game when this runs out.")
         }
         val m = rows.maxBy { it.mem.textureMb }.mem
-        if (m.textureTriggerMb > 0 && m.textureTriggerMb > totalRamMb * 0.15f) {
+        val vk = rows.mapNotNull { it.mem.vulkanMb }.maxOrNull()
+        if (vk != null && vk > totalRamMb * 0.25f) {
             add(
-                "Optimisation candidate: the texture cache only starts freeing memory at ${m.textureTriggerMb} MB (that limit was tuned for phones with more RAM). " +
+                "Graphics memory reached $vk MB, ${(vk * 100f / totalRamMb).roundToInt()}% of this phone's RAM. " +
+                    "Part of it is fixed emulator buffers allocated at start; lower Resolution reduces the rest."
+            )
+        }
+        if (vk == null && m.textureTriggerMb > 0 && m.textureTriggerMb > totalRamMb * 0.15f && m.textureMb >= m.textureTriggerMb / 2) {
+            add(
+                "Optimisation candidate: the texture cache only starts freeing memory at ${m.textureTriggerMb} MB (that limit was tuned for devices with more RAM). " +
                     "On this ${totalRamMb} MB phone a lower limit would leave more room."
             )
         }

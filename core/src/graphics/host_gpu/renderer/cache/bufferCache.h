@@ -36,7 +36,17 @@ class BufferCache {
 public:
 	static constexpr uint32_t CACHING_PAGEBITS  = 14;
 	static constexpr uint64_t CACHING_PAGESIZE  = uint64_t {1} << CACHING_PAGEBITS;
-	static constexpr uint64_t CACHING_NUMPAGES  = (LOWER_ADDRESS_SIZE + LibKernel::Memory::kExtendedMemorySize) >> CACHING_PAGEBITS;
+#if defined(__ANDROID__)
+	// PocketOberon: on Android the guest only owns addresses below 256 GiB (HOST_USER_MAX in
+	// kernel/memoryAddressSpace.inc), and extended memory (kExtendedMemoryBase) is not reserved:
+	// 39-bit Android kernels cannot map it. Covering the full 1 TiB + 512 GiB made the device-
+	// address page table 768 MiB of GPU memory, allocated up front; this range needs 128 MiB.
+	// Addresses past the table read as missing in shaders (see DefineGetBdaPointer).
+	static constexpr uint64_t BDA_ADDRESS_SPACE = uint64_t {1} << 38u;
+#else
+	static constexpr uint64_t BDA_ADDRESS_SPACE = LOWER_ADDRESS_SIZE + LibKernel::Memory::kExtendedMemorySize;
+#endif
+	static constexpr uint64_t CACHING_NUMPAGES  = BDA_ADDRESS_SPACE >> CACHING_PAGEBITS;
 	static constexpr uint64_t BDA_PAGETABLE_SIZE =
 	    CACHING_NUMPAGES * sizeof(vk::DeviceAddress);
 

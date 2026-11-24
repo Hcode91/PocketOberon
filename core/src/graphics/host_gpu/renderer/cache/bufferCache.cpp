@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <chrono>
 #include <dlfcn.h>
+#include <unistd.h>
 #include <string>
 #include <unwind.h>
 #include <pthread.h>
@@ -52,6 +53,22 @@ constexpr uint64_t GdsBufferSize = 64 * 1024;
 uint64_t StreamBufferSize() {
 	Common::DebugFlags::CachedValue mb("debug.capy.stream_mb", 64);
 	return static_cast<uint64_t>(std::clamp<int64_t>(mb.Get(), 16, 1024)) * MiB;
+}
+
+// Ring for CPU-to-GPU buffer uploads. 512 MiB suits 12-16 GiB handhelds; on phones with less
+// RAM (8 GiB ones report ~7 GiB) it is GPU memory the game then lacks, and Android's low-memory
+// killer closed games while they loaded. Uploads larger than the ring already fall back to a
+// temporary buffer. `setprop debug.capy.staging_mb N` overrides it (read at start).
+uint64_t StagingBufferSize() {
+	Common::DebugFlags::CachedValue mb("debug.capy.staging_mb", 0);
+	if (mb.Get() > 0) {
+		return static_cast<uint64_t>(std::clamp<int64_t>(mb.Get(), 64, 1024)) * MiB;
+	}
+	const auto pages     = sysconf(_SC_PHYS_PAGES);
+	const auto page_size = sysconf(_SC_PAGESIZE);
+	const auto ram       = pages > 0 && page_size > 0 ? static_cast<uint64_t>(pages) * static_cast<uint64_t>(page_size) : 0;
+	constexpr uint64_t SmallRam = 10ull * 1024 * MiB;
+	return (ram != 0 && ram < SmallRam ? 256 : 512) * MiB;
 }
 
 } // namespace
@@ -121,8 +138,14 @@ void BufferCache::ChangeRegister(BufferId id) {
 			m_page_table[page] = {};
 		}
 	}
-	const auto size_pages = pages.last_exclusive - pages.first;
-	const auto table_offset = PageIndex(buffer.CpuAddress()) * sizeof(vk::DeviceAddress);
+	// Pages past the device-address table (a buffer grown toward the top of the address space)
+	// have no guest memory behind them; only the part inside the table is written.
+	const auto first_index = PageIndex(buffer.CpuAddress());
+	const auto size_pages  = first_index >= CACHING_NUMPAGES
+	                             ? uint64_t {0}
+	                             : std::min<uint64_t>(pages.last_exclusive - pages.first,
+	                                                  CACHING_NUMPAGES - first_index);
+	const auto table_offset = first_index * sizeof(vk::DeviceAddress);
 	if constexpr (insert) {
 		const auto [it, inserted] = m_buffers.emplace(buffer.CpuAddress(), id);
 		(void)it;
@@ -134,8 +157,10 @@ void BufferCache::ChangeRegister(BufferId id) {
 		for (uint64_t i = 0; i < size_pages; ++i) {
 			addresses.push_back(buffer.BufferDeviceAddress() + (i << CACHING_PAGEBITS));
 		}
-		WriteDataBuffer(m_bda_pagetable_buffer, table_offset,
-		                addresses.data(), addresses.size() * sizeof(vk::DeviceAddress));
+		if (size_pages != 0) {
+			WriteDataBuffer(m_bda_pagetable_buffer, table_offset,
+			                addresses.data(), addresses.size() * sizeof(vk::DeviceAddress));
+		}
 	} else {
 		const auto found = m_buffers.find(buffer.CpuAddress());
 		EXIT_IF(found == m_buffers.end() || found->second != id);
@@ -143,8 +168,10 @@ void BufferCache::ChangeRegister(BufferId id) {
 		EXIT_IF(buffer.Size() > m_total_used_memory);
 		m_total_used_memory -= buffer.Size();
 		m_lru_cache.Free(buffer.lru_id);
-		m_bda_pagetable_buffer.Fill(table_offset,
-		                            size_pages * sizeof(vk::DeviceAddress), 0);
+		if (size_pages != 0) {
+			m_bda_pagetable_buffer.Fill(table_offset,
+			                            size_pages * sizeof(vk::DeviceAddress), 0);
+		}
 		buffer.is_deleted = true;
 	}
 }
@@ -290,7 +317,7 @@ BufferCache::BufferCache(GraphicContext& graphics, CommandScheduler& scheduler,
       m_bda_pagetable_buffer(graphics, scheduler, MemoryUsage::DeviceLocal, 0, AllFlags,
                              BDA_PAGETABLE_SIZE),
       m_memory_tracker(page_manager),
-      m_staging_buffer(graphics, scheduler, MemoryUsage::Upload, 512 * MiB),
+      m_staging_buffer(graphics, scheduler, MemoryUsage::Upload, StagingBufferSize()),
       m_stream_buffer(graphics, scheduler, MemoryUsage::Stream, StreamBufferSize()),
       m_descriptor_buffer(graphics, scheduler, MemoryUsage::Stream, 16 * MiB),
       m_download_buffer(graphics, scheduler, MemoryUsage::Download, 64 * MiB),

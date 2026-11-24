@@ -24,6 +24,8 @@ static constexpr uint64_t HOST_USER_MIN            = 0x1000000000ull;
 // of address space once Unity started its job workers. Guests rarely need more than a few GiB,
 // but Unreal hands out pools 128 GiB apart inside its 512 GiB reservation (Guri maps at
 // 0x3040df0000), so the guest owns up to 256 GiB and the host keeps the other half.
+// BufferCache::BDA_ADDRESS_SPACE (bufferCache.h) covers exactly this range on Android: raise
+// both together.
 static constexpr uint64_t HOST_USER_MAX = 0x3fffffffffull;
 #else
 static constexpr uint64_t HOST_USER_MAX = 0xfbffffffffull;
