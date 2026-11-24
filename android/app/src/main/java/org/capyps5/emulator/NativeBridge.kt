@@ -92,6 +92,12 @@ object NativeBridge {
     const val STAT_MEM_VULKAN_USED = 25
     const val STAT_MEM_VULKAN_BUDGET = 26
     const val STAT_TEXTURE_EVICTIONS = 27
+    // Where guest RAM comes from (cumulative bytes / counts); see telemetry.h.
+    const val STAT_FILE_MAP_BYTES = 28
+    const val STAT_FILE_MAPS = 29
+    const val STAT_FILE_READ_BYTES = 30
+    const val STAT_FLEXIBLE_MAP_BYTES = 31
+    const val STAT_DIRECT_MAP_BYTES = 32
 
     /** Worst game frame time (ns) since the last call; separate from the overlay's STAT_MAX_FRAME_NS. */
     external fun nativeTakeLogMaxFrameNs(): Long

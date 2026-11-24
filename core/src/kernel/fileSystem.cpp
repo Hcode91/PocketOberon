@@ -20,6 +20,7 @@
 #include "common/logging/log.h"
 #include "common/stringUtils.h"
 #include "common/threads.h"
+#include "common/telemetry.h"
 #include "kernel/guestFileRead.h"
 #include "kernel/memory.h"
 #include "libs/errno.h"
@@ -895,8 +896,14 @@ int64_t KYTY_SYSV_ABI KernelPread(int d, void* buf, size_t nbytes, int64_t offse
 
 	LOGF("\tRead %u bytes (pos = %" PRId64 ") from: %s\n", bytes_read, offset,
 	     Common::PathToString(file->real_name).c_str());
+	Common::Telemetry::g_file_read_bytes.fetch_add(bytes_read, std::memory_order_relaxed);
 
 	return bytes_read;
+}
+
+std::string KernelDescriptorName(int d) {
+	auto* file = d >= DESCRIPTOR_MIN && g_files != nullptr ? g_files->GetFile(d) : nullptr;
+	return file != nullptr ? file->name : std::string {};
 }
 
 static int ValidateIovecs(const KernelIovec* iov, int iovcnt, int64_t offset,

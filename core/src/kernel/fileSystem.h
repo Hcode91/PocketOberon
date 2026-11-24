@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <string>
 
 namespace Libs::LibKernel::FileSystem {
 
@@ -69,6 +70,8 @@ int KYTY_SYSV_ABI     KernelClose(int d);
 int KYTY_SYSV_ABI     KernelFcntl(int d, int command, int arg);
 int64_t KYTY_SYSV_ABI KernelRead(int d, void* buf, size_t nbytes);
 int64_t KYTY_SYSV_ABI KernelPread(int d, void* buf, size_t nbytes, int64_t offset);
+// Guest path of an open descriptor (empty if unknown); for diagnostics.
+std::string KernelDescriptorName(int d);
 int64_t KYTY_SYSV_ABI KernelPreadv(int d, const KernelIovec* iov, int iovcnt, int64_t offset);
 int64_t KYTY_SYSV_ABI KernelWrite(int d, const void* buf, size_t nbytes);
 int64_t KYTY_SYSV_ABI KernelPwrite(int d, const void* buf, size_t nbytes, int64_t offset);

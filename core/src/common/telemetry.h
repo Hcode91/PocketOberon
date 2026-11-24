@@ -57,6 +57,16 @@ inline std::atomic<uint64_t> g_mem_vulkan_budget {0};
 // Images the texture cache evicted (cumulative; a high rate means it is thrashing).
 inline std::atomic<uint64_t> g_texture_evictions {0};
 
+// Where guest RAM comes from, for the performance log (cumulative bytes).
+// File mappings (mmap of a file) are copied whole into guest memory, unlike on a PS5 where pages
+// load on demand; g_file_read_bytes is ordinary read()/pread() for comparison.
+inline std::atomic<uint64_t> g_file_map_bytes {0};
+inline std::atomic<uint64_t> g_file_maps {0};
+inline std::atomic<uint64_t> g_file_read_bytes {0};
+// Flexible and direct memory the game mapped (requested sizes; pages count once touched).
+inline std::atomic<uint64_t> g_flexible_map_bytes {0};
+inline std::atomic<uint64_t> g_direct_map_bytes {0};
+
 inline uint64_t NowNs() {
 	return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
 	                                 std::chrono::steady_clock::now().time_since_epoch())

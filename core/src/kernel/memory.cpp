@@ -9,6 +9,7 @@
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "common/stringUtils.h"
+#include "common/telemetry.h"
 #include "common/threads.h"
 #include "common/virtualMemory.h"
 #include "graphics/guest_gpu/graphicsRun.h"
@@ -3236,7 +3237,16 @@ int32_t KYTY_SYSV_ABI KernelMapNamedFlexibleMemory(void** addr_in_out, size_t le
 int KYTY_SYSV_ABI KernelMapFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags) {
 	PRINT_NAME();
 	std::lock_guard<std::recursive_mutex> memory_operation_lock(g_memory_operation_mutex);
-	return MapFlexibleMemory(addr_in_out, len, prot, flags, "");
+	const int result = MapFlexibleMemory(addr_in_out, len, prot, flags, "");
+	if (result == OK) {
+		const auto total = Common::Telemetry::g_flexible_map_bytes.fetch_add(len, std::memory_order_relaxed) + len;
+		if (len >= 64ull * 1024 * 1024) {
+			__android_log_print(ANDROID_LOG_WARN, "CapyPS5-MemMap", "flexible map %.1f MB at %p (all flexible maps: %.1f MB)",
+			                    static_cast<double>(len) / 1048576.0, addr_in_out != nullptr ? *addr_in_out : nullptr,
+			                    static_cast<double>(total) / 1048576.0);
+		}
+	}
+	return result;
 }
 
 int KYTY_SYSV_ABI KernelSetPrtAperture(int index, void* addr, size_t len) {
@@ -4266,6 +4276,14 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 	std::lock_guard<std::recursive_mutex> memory_operation_lock(g_memory_operation_mutex);
 	const auto requested = (addr != nullptr ? reinterpret_cast<uint64_t>(*addr) : 0);
 	const int  result    = MapDirectMemory(addr, len, prot, flags, direct_memory_start, alignment, "");
+	if (result == OK) {
+		const auto total = Common::Telemetry::g_direct_map_bytes.fetch_add(len, std::memory_order_relaxed) + len;
+		if (len >= 64ull * 1024 * 1024) {
+			__android_log_print(ANDROID_LOG_WARN, "CapyPS5-MemMap", "direct map %.1f MB at %p (all direct maps: %.1f MB)",
+			                    static_cast<double>(len) / 1048576.0, addr != nullptr ? *addr : nullptr,
+			                    static_cast<double>(total) / 1048576.0);
+		}
+	}
 	if (result != OK) {
 		Common::DebugFlags::NoteOnce("CapyPS5-Mem", requested ^ 0x4d4150ull,
 		                             "MapDirectMemory 0x%llx len=0x%llx flags=0x%x failed: 0x%x",

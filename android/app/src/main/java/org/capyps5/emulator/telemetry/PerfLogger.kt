@@ -232,7 +232,8 @@ class PerfLogger(
                 "present_ms_per_s", "top_thread", "top_thread_pct", "top_thread_cpu",
                 "guest_ram_mb", "emu_heap_mb", "files_mb", "swap_mb", "graphics_mb",
                 "tex_cache_mb", "tex_gc_start_mb", "buf_cache_mb", "vulkan_used_mb", "evictions_per_s",
-                "low_memory", "trim_level",
+                "low_memory", "trim_level", "file_mapped_mb", "file_maps", "file_read_mb",
+                "flexible_mapped_mb", "direct_mapped_mb",
             )
         )
     }.joinToString(",")
@@ -253,6 +254,8 @@ class PerfLogger(
         add(m.graphicsMb?.toString() ?: ""); add(m.textureMb.toString()); add(m.textureTriggerMb.toString())
         add(m.bufferMb.toString()); add(m.vulkanMb?.toString() ?: ""); add(f1(m.evictionsPerSec))
         add(if (m.lowMemory) "1" else "0"); add(m.trimLevel?.toString() ?: "")
+        add(m.fileMapMb.toString()); add(m.fileMaps.toString()); add(m.fileReadMb.toString())
+        add(m.flexibleMapMb.toString()); add(m.directMapMb.toString())
     }.joinToString(",")
 
     private fun writeReport() {
@@ -474,6 +477,12 @@ class PerfLogger(
         val lowMemory: Boolean,
         /** onTrimMemory level Android sent in this second, if any. */
         val trimLevel: Int?,
+        /** Totals so far: files memory-mapped (copied whole into RAM), files read, memory mapped. */
+        val fileMapMb: Int,
+        val fileMaps: Int,
+        val fileReadMb: Int,
+        val flexibleMapMb: Int,
+        val directMapMb: Int,
     )
 
     private var lastGraphicsMb: Int? = null
@@ -520,6 +529,11 @@ class PerfLogger(
             evictionsPerSec = evictionsPerSec,
             lowMemory = lowMemory,
             trimLevel = trim,
+            fileMapMb = mb(NativeBridge.STAT_FILE_MAP_BYTES),
+            fileMaps = (stats.getOrNull(NativeBridge.STAT_FILE_MAPS) ?: 0L).toInt(),
+            fileReadMb = mb(NativeBridge.STAT_FILE_READ_BYTES),
+            flexibleMapMb = mb(NativeBridge.STAT_FLEXIBLE_MAP_BYTES),
+            directMapMb = mb(NativeBridge.STAT_DIRECT_MAP_BYTES),
         )
     }
 
@@ -570,6 +584,14 @@ class PerfLogger(
         }
         val evictions = rows.sumOf { it.mem.evictionsPerSec.toDouble() }.roundToInt()
         appendLine("  Textures evicted: $evictions${if (evictions > 0) " (peak ${f1(rows.maxOf { it.mem.evictionsPerSec })}/s)" else ""}")
+        appendLine(
+            "  Game memory requests so far: direct ${last.mem.directMapMb} MB, flexible ${last.mem.flexibleMapMb} MB " +
+                "(pages only count in RAM once used)"
+        )
+        appendLine(
+            "  Files: ${last.mem.fileMaps} memory-mapped = ${last.mem.fileMapMb} MB copied whole into RAM; " +
+                "${last.mem.fileReadMb} MB read normally. Large ones are named in the log (tag CapyPS5-MemMap)."
+        )
         val lowSecs = rows.count { it.mem.lowMemory }
         appendLine("  Android 'low memory' flag: ${if (lowSecs == 0) "never set" else "set for $lowSecs s"}")
         if (trimEvents.isEmpty()) {
@@ -606,6 +628,13 @@ class PerfLogger(
             .maxBy { it.second }
         if (minAvail < totalRamMb * 0.10f && biggest.second > 0) {
             add("When memory was tightest, the largest part was ${biggest.first} (${biggest.second} MB): that is the first thing to shrink.")
+        }
+        val fileMapped = rows.last().mem.fileMapMb
+        if (fileMapped >= 256) {
+            add(
+                "$fileMapped MB of game files were memory-mapped, which this emulator copies whole into RAM that Android cannot reclaim. " +
+                    "Mapping them from storage instead (loaded on demand) is the fix to try."
+            )
         }
         if (rows.maxOf { it.mem.evictionsPerSec } >= 20f) {
             add("The texture cache is evicting a lot (up to ${f1(rows.maxOf { it.mem.evictionsPerSec })} textures/s), which causes re-uploads and stutter.")

@@ -5,6 +5,7 @@
 #if defined(__ANDROID__)
 #include <android/log.h>
 #endif
+#include "common/telemetry.h"
 #include "common/debugFlags.h"
 #include "cpu/cpuBackend.h"
 #include "common/abi.h"
@@ -2181,6 +2182,18 @@ void* KYTY_SYSV_ABI mmap(void* addr, size_t len, int prot, int flags, int fd, in
 			done += static_cast<size_t>(got);
 		}
 		result = LibKernel::Memory::KernelMprotect(out, aligned, prot);
+		// PocketOberon: the whole mapping now sits in RAM Android cannot reclaim. Count it, and name
+		// large ones in the log, to see how much loading-time memory comes from this.
+		const auto total = Common::Telemetry::g_file_map_bytes.fetch_add(done, std::memory_order_relaxed) + done;
+		const auto count = Common::Telemetry::g_file_maps.fetch_add(1, std::memory_order_relaxed) + 1;
+		if (len >= 1024 * 1024) {
+			__android_log_print(ANDROID_LOG_WARN, "CapyPS5-MemMap",
+			                    "file mmap #%llu: %s offset=0x%llx len=%.1f MB copied=%.1f MB (all file maps: %.1f MB)",
+			                    static_cast<unsigned long long>(count),
+			                    LibKernel::FileSystem::KernelDescriptorName(fd).c_str(),
+			                    static_cast<unsigned long long>(offset), static_cast<double>(len) / 1048576.0,
+			                    static_cast<double>(done) / 1048576.0, static_cast<double>(total) / 1048576.0);
+		}
 	}
 	if (result != OK) {
 		*GetErrorAddr() = LibKernel::KernelToPosix(result);

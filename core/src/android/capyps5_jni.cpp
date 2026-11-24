@@ -311,6 +311,11 @@ static jlongArray GetStats(JNIEnv* env, bool reset_max) {
 	    static_cast<jlong>(g_mem_vulkan_used.load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_mem_vulkan_budget.load(std::memory_order_relaxed)),
 	    static_cast<jlong>(g_texture_evictions.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_file_map_bytes.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_file_maps.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_file_read_bytes.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_flexible_map_bytes.load(std::memory_order_relaxed)),
+	    static_cast<jlong>(g_direct_map_bytes.load(std::memory_order_relaxed)),
 	};
 	constexpr auto count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
 	jlongArray     array = env->NewLongArray(count);
