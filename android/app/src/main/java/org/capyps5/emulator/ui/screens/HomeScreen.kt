@@ -258,6 +258,8 @@ fun HomeScreen(
  */
 private fun treeUriToPath(uri: Uri): String? {
     val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
+    // The Downloads provider can hand out real paths directly ("raw:/storage/emulated/0/...").
+    if (docId.startsWith("raw:")) return docId.removePrefix("raw:")
     val volume = docId.substringBefore(':')
     val relative = docId.substringAfter(':', "")
     val root = if (volume.equals("primary", ignoreCase = true)) {

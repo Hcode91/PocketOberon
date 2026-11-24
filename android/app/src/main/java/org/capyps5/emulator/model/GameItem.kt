@@ -123,15 +123,24 @@ data class GameItem(
             result
         }.getOrNull()
 
-        /** Scans a root folder for game directories and loose executables. */
+        /**
+         * Scans a library folder for games. The folder may itself be a game (eboot.bin inside it),
+         * hold game folders, or hold folders that each wrap one game folder (dumps are often
+         * nested, e.g. "Game name/PPSA01234-app/eboot.bin"), so two levels below it are checked.
+         */
         fun scan(root: File): List<GameItem> {
+            if (File(root, "eboot.bin").isFile) return listOf(fromGameDir(root))
             val entries = root.listFiles() ?: return emptyList()
-            return entries.sortedBy { it.name.lowercase() }.mapNotNull { f ->
+            return entries.sortedBy { it.name.lowercase() }.flatMap { f ->
                 when {
-                    f.isDirectory && File(f, "eboot.bin").exists() -> fromGameDir(f)
+                    f.isDirectory && File(f, "eboot.bin").isFile -> listOf(fromGameDir(f))
+                    f.isDirectory -> f.listFiles()
+                        ?.filter { it.isDirectory && File(it, "eboot.bin").isFile }
+                        ?.map { fromGameDir(it) }
+                        .orEmpty()
                     f.isFile && f.extension.lowercase() in setOf("elf", "self") ->
-                        GameItem(f.nameWithoutExtension, f.name, f.parent ?: root.absolutePath, f.absolutePath)
-                    else -> null
+                        listOf(GameItem(f.nameWithoutExtension, f.name, f.parent ?: root.absolutePath, f.absolutePath))
+                    else -> emptyList()
                 }
             }.sortedBy { it.titleName.lowercase() }
         }
